@@ -123,3 +123,52 @@ def test_run_pipeline_counts_processed_and_detected_records(tmp_path):
     assert result["records_processed"] == 2
     assert len(result["anomalies_detected"]) == 1
     assert result["events_consumed"] == []
+
+def test_high_response_time_only_is_anomaly():
+    detector = AnomalyDetector()
+    record = {
+        "timestamp": "2026-09-20T10:00:00",
+        "service": "payment-service",
+        "response_time_ms": 600,
+        "cpu_percent": 40,
+        "memory_percent": 50,
+        "log_level": "INFO",
+        "message": "slow response"
+    }
+    event = detector.detect(record)
+    assert event is not None
+    assert "High response time" in event["reasons"]
+
+def test_high_cpu_and_memory_are_both_reported():
+    detector = AnomalyDetector()
+    record = {
+        "timestamp": "2026-09-20T10:00:00",
+        "service": "payment-service",
+        "response_time_ms": 100,
+        "cpu_percent": 90,
+        "memory_percent": 85,
+        "log_level": "INFO",
+        "message": "resource pressure"
+    }
+    event = detector.detect(record)
+    assert event is not None
+    assert "High CPU utilization" in event["reasons"]
+    assert "High memory utilization" in event["reasons"]
+
+def test_run_pipeline_without_anomalies_returns_empty_detected_list(tmp_path):
+    data = [{
+        "timestamp": "2026-09-20T10:00:00",
+        "service": "payment-service",
+        "response_time_ms": 100,
+        "cpu_percent": 40,
+        "memory_percent": 50,
+        "log_level": "INFO",
+        "message": "ok"
+    }]
+
+    file_path = tmp_path / "service_data.json"
+    file_path.write_text(json.dumps(data), encoding="utf-8")
+
+    result = run_pipeline(str(file_path))
+    assert result["records_processed"] == 1
+    assert result["anomalies_detected"] == []
